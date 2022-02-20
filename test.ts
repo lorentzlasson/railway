@@ -1,6 +1,15 @@
 import { pipe } from 'remeda'
 
-import { Result, map, tee, andThen as step, success, failure, match } from '.'
+import {
+  Result,
+  map,
+  tee,
+  andThen as step,
+  andThenP,
+  success,
+  failure,
+  match,
+} from '.'
 
 const db: Record<number, string> = { 13: 'supersecretdata' }
 
@@ -14,33 +23,27 @@ type Payload2 = Payload & {
   retrieved: string
 }
 
-const validate = (x: Payload): Result<Payload, string> => {
-  if (x.foo !== 'bar') {
-    return failure('input must have key foo with value bar')
-  }
-  return success(x)
-}
+const validate = (x: Payload): Result<Payload, string> =>
+  x.foo !== 'bar'
+    ? failure('input must have key foo with value bar')
+    : success(x)
 
-const authorize = (x: Payload): Result<Payload, string> => {
-  const authorizedUser = 'Bob'
+const authorize = (x: Payload): Result<Payload, string> =>
+  x.user !== 'Bob' ? failure('user is not authorized') : success(x)
 
-  if (x.user !== authorizedUser) {
-    return failure('user is not authorized')
-  }
-  return success(x)
-}
-
-const retrieve = (x: Payload): Result<Payload2, string> => {
+const retrieve = (x: Payload): Promise<Result<Payload2, string>> => {
   const value = db[x.id]
 
   if (!value) {
-    return failure(`${x.id} not found`)
+    return Promise.resolve(failure(`${x.id} not found`))
   }
 
-  return success({
-    retrieved: value,
-    ...x,
-  })
+  return Promise.resolve(
+    success({
+      retrieved: value,
+      ...x,
+    }),
+  )
 }
 
 const sendEmail = ({ user }: Payload2): void => {
@@ -61,7 +64,7 @@ const railway = (input: Payload) =>
     input,
     validate,
     step(authorize),
-    step(retrieve),
+    andThenP(retrieve),
     tee(sendEmail),
     map(format),
     match(handleSuccess, handleFail),
